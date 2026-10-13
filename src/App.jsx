@@ -28,7 +28,11 @@ function IconButton({ label, children, className = "", onClick }) {
 }
 
 function Brand({ className = "", onClick }) {
-  return <a className={`brand ${className}`} href="#top" aria-label="Kasua home" onClick={event => { event.preventDefault(); onClick?.(); }}><img className="brand-logo" src="/smk.jpeg" alt="Smart Kasua" /></a>;
+  return <a className={`brand ${className}`} href="#top" aria-label="Kasua home" onClick={event => { if (onClick) { event.preventDefault(); onClick(); } }}><img className="brand-logo" src="/smk.jpeg" alt="Smart Kasua" /></a>;
+}
+
+function AuthHeader({ onHome }) {
+  return <header className="auth-header"><Brand onClick={onHome} /></header>;
 }
 
 function Dialog({ title, children, onClose, wide = false }) {
@@ -88,8 +92,9 @@ function RegisterPage({ onRegister, onLogin, onHome }) {
     if (accountType === "merchant") account.application = { stall: form.stall.trim(), market: form.market.trim(), stallNumber: form.stallNumber.trim(), landmark: form.landmark.trim() };
     setError(onRegister(account) || "");
   }
-  return <main className="account-gate" id="top">
-    <Brand className="gate-brand" onClick={onHome} />
+  return <div className="auth-page" id="top">
+    <AuthHeader onHome={onHome} />
+    <main className="account-gate">
     <section className="account-panel">
       <div className="eyebrow"><ShieldCheck size={14} /> Create your Kasua account</div>
       <h1>{accountType === "merchant" ? "Apply to sell on Kasua" : "Register as a consumer"}</h1>
@@ -111,7 +116,8 @@ function RegisterPage({ onRegister, onLogin, onHome }) {
       </form>
       <p className="auth-switch">Already registered? <button className="text-button" type="button" onClick={onLogin}>Login</button></p>
     </section>
-  </main>;
+    </main>
+  </div>;
 }
 
 function LoginPage({ onLogin, onRegister, onHome }) {
@@ -122,8 +128,9 @@ function LoginPage({ onLogin, onRegister, onHome }) {
     event.preventDefault();
     setError(onLogin(role, phone) || "");
   }
-  return <main className="account-gate" id="top">
-    <Brand className="gate-brand" onClick={onHome} />
+  return <div className="auth-page" id="top">
+    <AuthHeader onHome={onHome} />
+    <main className="account-gate">
     <section className="account-panel">
       <div className="eyebrow"><ShieldCheck size={14} /> One account, one role</div>
       <h1>Login to Kasua</h1>
@@ -132,12 +139,14 @@ function LoginPage({ onLogin, onRegister, onHome }) {
       <form className="account-form" onSubmit={submit}><div className="form-field"><label htmlFor="login-phone">Mobile number</label><input id="login-phone" name="phone" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} required placeholder="e.g. 080 1234 5678" /></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button wide-button" type="submit">Login as {role}</button><p className="fine-print">Demo login checks accounts registered in this browser. Secure sign-in needs the Kasua backend.</p></form>
       <p className="auth-switch">New to Kasua? <button className="text-button" type="button" onClick={onRegister}>Register</button></p>
     </section>
-  </main>;
+    </main>
+  </div>;
 }
 
 function MerchantApplicationStatus({ account, onLogout }) {
-  return <main className="account-gate">
-    <Brand className="gate-brand" />
+  return <div className="auth-page" id="top">
+    <AuthHeader />
+    <main className="account-gate">
     <section className="account-panel application-status">
       <div className="eyebrow"><ScanEye size={14} /> Merchant application</div>
       <h1>Review in progress</h1>
@@ -146,7 +155,8 @@ function MerchantApplicationStatus({ account, onLogout }) {
       <p className="fine-print">This demo records a pending application in this browser. It does not verify identity or approve merchant access.</p>
       <button className="primary-button wide-button" type="button" onClick={onLogout}>Sign out</button>
     </section>
-  </main>;
+    </main>
+  </div>;
 }
 
 function ProductCard({ product, onAdd }) {

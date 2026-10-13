@@ -24,8 +24,8 @@ button { color: inherit; }
 a { color: inherit; text-decoration: none; }
 img { display: block; width: 100%; object-fit: cover; }
 .app-shell { width: min(1440px, 100%); margin: 0 auto; }
-.topbar { position: sticky; z-index: 10; top: 0; background: black; border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); }
-.topbar-inner { min-height: 76px; display: flex; align-items: center; gap: 26px; padding: 0 5.2%; }
+.topbar { position: sticky; z-index: 10; top: 0; background: black; box-shadow: inset 0 -1px var(--line); backdrop-filter: blur(16px); }
+.topbar-inner { min-height: 88px; display: flex; align-items: center; gap: 26px; padding: 0 5.2%; }
 .brand { width: 160px; height: 72px; flex: 0 0 160px; display: flex; align-items: center; color: var(--ink); }
 .brand-logo { width: 160px; height: 72px; flex: 0 0 160px; object-fit: contain; border-radius: 0; background: #000; }
 .brand-name { font: 800 20px/1 "Manrope", sans-serif; letter-spacing: -.4px; }
@@ -206,6 +206,8 @@ h1 { margin: 4px 0 0; font: 700 26px/1.2 "Manrope", sans-serif; letter-spacing: 
 .landing-page { min-height: 100vh; background: var(--paper); }
 main.landing-page { padding: 0; }
 .landing-header { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 8px max(5.2%, calc((100vw - 1290px) / 2)); background: #000; }
+.auth-page { min-height: 100vh; background: radial-gradient(ellipse at 50% 0%, #e9f2e4 0, var(--paper) 48%); }
+.auth-header { min-height: 88px; display: flex; align-items: center; padding: 8px max(5.2%, calc((100vw - 1290px) / 2)); background: #000; }
 .landing-header nav { display: flex; align-items: center; gap: 20px; }
 .landing-header .text-button { color: white; }
 .landing-hero { position: relative; min-height: 570px; display: flex; align-items: center; overflow: hidden; padding: 70px max(7%, calc((100vw - 1220px) / 2)); background: #174e34 url("https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1800&q=85") center 50%/cover no-repeat; color: white; }
@@ -222,8 +224,7 @@ main.landing-page { padding: 0; }
 .landing-benefits strong, .landing-benefits small { display: block; }
 .landing-benefits strong { color: var(--ink); font-size: 12px; }
 .landing-benefits small { margin-top: 4px; color: var(--muted); font-size: 11px; }
-.account-gate { min-height: 100vh; display: grid; align-content: start; justify-items: center; padding: 38px 20px 56px; background: radial-gradient(ellipse at 50% 0%, #e9f2e4 0, var(--paper) 48%); }
-.gate-brand { margin-bottom: 30px; }
+.account-gate { min-height: calc(100vh - 88px); display: grid; align-content: start; justify-items: center; padding: 38px 20px 56px; background: transparent; }
 .account-panel { width: min(520px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: var(--shadow); }
 .account-panel h1 { margin-top: 9px; font-size: 25px; }
 .account-intro { margin: 9px 0 20px; color: var(--muted); font-size: 13px; line-height: 1.55; }
@@ -260,7 +261,10 @@ main.landing-page { padding: 0; }
   .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 790px) {
-  .topbar-inner { flex-wrap: wrap; gap: 8px 14px; padding: 12px 11px; }
+  .topbar-inner { min-height: 76px; flex-wrap: wrap; gap: 8px 14px; padding: 8px 14px; }
+  .auth-header { min-height: 76px; padding: 8px 14px; }
+  .landing-header { min-height: 76px; padding: 2px 14px; }
+  .brand, .brand-logo { width: 132px; height: 60px; flex-basis: 132px; }
   .brand { margin-right: auto; }
   .location-button { display: none; }
   .searchbox { order: 3; flex-basis: 100%; max-width: none; }
@@ -282,15 +286,14 @@ main.landing-page { padding: 0; }
   .avatar { width: 32px; height: 32px; }
   .welcome-row { align-items: flex-start; flex-direction: column; gap: 13px; }
   .account-gate { align-content: center; padding: 20px 14px 32px; }
-  .gate-brand { margin-bottom: 18px; }
+  .account-gate { min-height: calc(100vh - 76px); }
   .account-panel { padding: 21px 17px; }
   .account-panel h1 { font-size: 22px; }
   .account-form .form-row { grid-template-columns: 1fr; gap: 0; }
   .account-role { align-self: flex-start; }
   h1 { font-size: 23px; }
   .hero { min-height: 236px; background-position: 58% center; }
-  .landing-header { min-height: 76px; gap: 8px; padding: 2px 14px; }
-  .brand, .brand-logo { width: 132px; height: 60px; flex-basis: 132px; }
+  .landing-header { gap: 8px; }
   .landing-header nav { gap: 8px; }
   .landing-header nav .primary-button { min-height: 36px; padding-inline: 8px; font-size: 11px; }
   .landing-hero { min-height: 470px; padding: 48px 22px; background-position: 58% center; }
