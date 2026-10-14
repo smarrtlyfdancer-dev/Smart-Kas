@@ -6,6 +6,7 @@ import {
   ShoppingBasket, Star, Store, Sun, Wallet, Wheat, X,
 } from "lucide-react";
 import { categories, demoOrder, formatNaira, readStored, starterInventory, starterProducts } from "./data.js";
+import { demoMode, loadAccountProfile, normalizeNigerianPhone, supabase, supabaseConfigured } from "./lib/supabase.js";
 
 const paymentMethods = [
   { id: "wallet", title: "Kasua wallet", detail: "Wallet balance" },
@@ -16,15 +17,15 @@ const paymentMethods = [
 const deliveryFee = 500;
 
 function usePersistentState(key, initialValue) {
-  const [value, setValue] = useState(() => readStored(key, initialValue));
+  const [value, setValue] = useState(() => demoMode ? readStored(key, initialValue) : initialValue);
   useEffect(() => {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    if (demoMode) window.localStorage.setItem(key, JSON.stringify(value));
   }, [key, value]);
   return [value, setValue];
 }
 
-function IconButton({ label, children, className = "", onClick }) {
-  return <button className={`icon-button ${className}`} type="button" aria-label={label} title={label} onClick={onClick}>{children}</button>;
+function IconButton({ label, children, className = "", onClick, disabled = false }) {
+  return <button className={`icon-button ${className}`} type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 
 function Brand({ className = "", onClick }) {
@@ -51,7 +52,7 @@ function Dialog({ title, children, onClose, wide = false }) {
   );
 }
 
-function Header({ search, setSearch, cartCount, walletBalance, onWallet, onCart, account, onLogout, showBrandName = false }) {
+function Header({ search, setSearch, cartCount, walletBalance, onWallet, onCart, account, onLogout, demoMode }) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -61,8 +62,8 @@ function Header({ search, setSearch, cartCount, walletBalance, onWallet, onCart,
         </button>
         <label className="searchbox"><Search size={17} /><input value={search} onChange={event => setSearch(event.target.value)} type="search" placeholder="Search tomatoes, rice, traders..." aria-label="Search marketplace" /></label>
         <div className="top-actions">
-          <button className="wallet-link" type="button" onClick={onWallet}><Wallet size={16} /><span>{formatNaira(walletBalance)}</span></button>
-          <IconButton label="View basket" onClick={onCart}><ShoppingBasket size={17} /><span className="cart-count">{cartCount}</span></IconButton>
+          <button className="wallet-link" type="button" onClick={onWallet} disabled={!demoMode} title={demoMode ? "Kasua wallet demo balance" : "Wallet is not connected yet"}><Wallet size={16} /><span>{demoMode ? formatNaira(walletBalance) : "Wallet unavailable"}</span></button>
+          <IconButton label="View basket" onClick={onCart} disabled={!demoMode}><ShoppingBasket size={17} />{demoMode && <span className="cart-count">{cartCount}</span>}</IconButton>
           <button className="avatar" type="button" onClick={onLogout} aria-label={`Sign out ${account.name}`} title={`Sign out ${account.name}`}>{account.name.slice(0, 1).toUpperCase()}</button>
         </div>
       </div>
@@ -78,19 +79,32 @@ function LandingPage({ onRegister, onLogin }) {
   </main>;
 }
 
-function RegisterPage({ onRegister, onLogin, onHome }) {
+function RegisterPage({ onRegister, onLogin, onHome, demoMode }) {
   const [accountType, setAccountType] = useState("consumer");
   const [form, setForm] = useState({ name: "", phone: "", stall: "", market: "", stallNumber: "", landmark: "", confirmsAccuracy: false });
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   function update(event) {
     const { name, value, checked, type } = event.target;
     setForm(current => ({ ...current, [name]: type === "checkbox" ? checked : value }));
   }
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
+    setBusy(true);
+    setError("");
     const account = { role: accountType, name: form.name.trim(), phone: form.phone.trim(), verificationStatus: accountType === "merchant" ? "pending" : "active" };
     if (accountType === "merchant") account.application = { stall: form.stall.trim(), market: form.market.trim(), stallNumber: form.stallNumber.trim(), landmark: form.landmark.trim() };
-    setError(onRegister(account) || "");
+    try {
+      const result = await onRegister(account, otpSent ? otp : "");
+      if (result?.otpSent) setOtpSent(true);
+      if (result?.error) setError(result.error);
+    } catch (submissionError) {
+      setError(submissionError.message || "Could not complete registration.");
+    } finally {
+      setBusy(false);
+    }
   }
   return <div className="auth-page" id="top">
     <AuthHeader onHome={onHome} />
@@ -99,20 +113,22 @@ function RegisterPage({ onRegister, onLogin, onHome }) {
       <div className="eyebrow"><ShieldCheck size={14} /> Create your Kasua account</div>
       <h1>{accountType === "merchant" ? "Apply to sell on Kasua" : "Register as a consumer"}</h1>
       <p className="account-intro">Each account has one role. Merchant access is enabled only after identity, stall and location checks.</p>
-      <div className="role-picker" aria-label="Account type"><button type="button" className={accountType === "consumer" ? "active" : ""} onClick={() => setAccountType("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={accountType === "merchant" ? "active" : ""} onClick={() => setAccountType("merchant")}><Store size={15} /> Merchant</button></div>
+      <div className="role-picker" aria-label="Account type"><button type="button" className={accountType === "consumer" ? "active" : ""} disabled={otpSent || busy} onClick={() => setAccountType("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={accountType === "merchant" ? "active" : ""} disabled={otpSent || busy} onClick={() => setAccountType("merchant")}><Store size={15} /> Merchant</button></div>
       <form className="account-form" onSubmit={submit}>
-        <div className="form-field"><label htmlFor="account-name">{accountType === "merchant" ? "Legal name" : "Your name"}</label><input id="account-name" name="name" autoComplete="name" value={form.name} onChange={update} required /></div>
-        <div className="form-field"><label htmlFor="account-phone">Mobile number</label><input id="account-phone" name="phone" type="tel" autoComplete="tel" value={form.phone} onChange={update} required placeholder="e.g. 080 1234 5678" /></div>
+        <div className="form-field"><label htmlFor="account-name">{accountType === "merchant" ? "Legal name" : "Your name"}</label><input id="account-name" name="name" autoComplete="name" value={form.name} onChange={update} required disabled={otpSent || busy} /></div>
+        <div className="form-field"><label htmlFor="account-phone">Mobile number</label><input id="account-phone" name="phone" type="tel" autoComplete="tel" value={form.phone} onChange={update} required disabled={otpSent || busy} placeholder="e.g. 080 1234 5678" /></div>
         {accountType === "merchant" && <>
-          <div className="form-field"><label htmlFor="merchant-stall">Business or stall name</label><input id="merchant-stall" name="stall" value={form.stall} onChange={update} required /></div>
-          <div className="form-row"><div className="form-field"><label htmlFor="merchant-market">Market</label><input id="merchant-market" name="market" value={form.market} onChange={update} required placeholder="e.g. Masaka Main" /></div><div className="form-field"><label htmlFor="merchant-stall-number">Stall number</label><input id="merchant-stall-number" name="stallNumber" value={form.stallNumber} onChange={update} required /></div></div>
-          <div className="form-field"><label htmlFor="merchant-landmark">Stall location or nearby landmark</label><input id="merchant-landmark" name="landmark" value={form.landmark} onChange={update} required /></div>
+          <div className="form-field"><label htmlFor="merchant-stall">Business or stall name</label><input id="merchant-stall" name="stall" value={form.stall} onChange={update} required disabled={otpSent || busy} /></div>
+          <div className="form-row"><div className="form-field"><label htmlFor="merchant-market">Market</label><input id="merchant-market" name="market" value={form.market} onChange={update} required disabled={otpSent || busy} placeholder="e.g. Masaka Main" /></div><div className="form-field"><label htmlFor="merchant-stall-number">Stall number</label><input id="merchant-stall-number" name="stallNumber" value={form.stallNumber} onChange={update} required disabled={otpSent || busy} /></div></div>
+          <div className="form-field"><label htmlFor="merchant-landmark">Stall location or nearby landmark</label><input id="merchant-landmark" name="landmark" value={form.landmark} onChange={update} required disabled={otpSent || busy} /></div>
           <div className="verification-requirements"><strong>Required before selling</strong><span>Phone ownership and legal identity check</span><span>Market association and stall confirmation</span><span>In-person stall inspection and location pin</span><span>Product and pricing policy review</span></div>
-          <label className="consent-row"><input name="confirmsAccuracy" type="checkbox" checked={form.confirmsAccuracy} onChange={update} required /><span>I confirm these details are accurate and consent to an in-person stall check.</span></label>
+          <label className="consent-row"><input name="confirmsAccuracy" type="checkbox" checked={form.confirmsAccuracy} onChange={update} required disabled={otpSent || busy} /><span>I confirm these details are accurate and consent to an in-person stall check.</span></label>
         </>}
+        {otpSent && <div className="form-field"><label htmlFor="register-otp">SMS verification code</label><input id="register-otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={event => setOtp(event.target.value)} required /></div>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="primary-button wide-button" type="submit">{accountType === "merchant" ? "Submit merchant application" : "Create consumer account"}</button>
-        <p className="fine-print">Demo registration is stored in this browser. Secure login, phone OTP and document review require the Kasua backend.</p>
+        <button className="primary-button wide-button" type="submit" disabled={busy}>{busy ? "Please wait..." : demoMode ? accountType === "merchant" ? "Submit merchant application" : "Create consumer account" : otpSent ? "Verify code and continue" : "Send verification code"}</button>
+        <p className="fine-print">{demoMode ? "Demo registration is stored in this browser. Do not use it for real customer or merchant data." : "A one-time SMS code verifies this mobile number. Merchant access remains pending review."}</p>
+        {otpSent && <button className="text-button account-back" type="button" onClick={() => { setOtpSent(false); setOtp(""); setError(""); }}>Use a different number or edit details</button>}
       </form>
       <p className="auth-switch">Already registered? <button className="text-button" type="button" onClick={onLogin}>Login</button></p>
     </section>
@@ -120,13 +136,26 @@ function RegisterPage({ onRegister, onLogin, onHome }) {
   </div>;
 }
 
-function LoginPage({ onLogin, onRegister, onHome }) {
+function LoginPage({ onLogin, onRegister, onHome, demoMode }) {
   const [role, setRole] = useState("consumer");
   const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
-    setError(onLogin(role, phone) || "");
+    setBusy(true);
+    setError("");
+    try {
+      const result = await onLogin(role, phone, otpSent ? otp : "");
+      if (result?.otpSent) setOtpSent(true);
+      if (result?.error) setError(result.error);
+    } catch (loginError) {
+      setError(loginError.message || "Could not sign in.");
+    } finally {
+      setBusy(false);
+    }
   }
   return <div className="auth-page" id="top">
     <AuthHeader onHome={onHome} />
@@ -135,8 +164,8 @@ function LoginPage({ onLogin, onRegister, onHome }) {
       <div className="eyebrow"><ShieldCheck size={14} /> One account, one role</div>
       <h1>Login to Kasua</h1>
       <p className="account-intro">Choose the role for the account you registered.</p>
-      <div className="role-picker" aria-label="Login as"><button type="button" className={role === "consumer" ? "active" : ""} onClick={() => setRole("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={role === "merchant" ? "active" : ""} onClick={() => setRole("merchant")}><Store size={15} /> Merchant</button></div>
-      <form className="account-form" onSubmit={submit}><div className="form-field"><label htmlFor="login-phone">Mobile number</label><input id="login-phone" name="phone" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} required placeholder="e.g. 080 1234 5678" /></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button wide-button" type="submit">Login as {role}</button><p className="fine-print">Demo login checks accounts registered in this browser. Secure sign-in needs the Kasua backend.</p></form>
+      <div className="role-picker" aria-label="Login as"><button type="button" className={role === "consumer" ? "active" : ""} disabled={otpSent || busy} onClick={() => setRole("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={role === "merchant" ? "active" : ""} disabled={otpSent || busy} onClick={() => setRole("merchant")}><Store size={15} /> Merchant</button></div>
+      <form className="account-form" onSubmit={submit}><div className="form-field"><label htmlFor="login-phone">Mobile number</label><input id="login-phone" name="phone" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={otpSent || busy} required placeholder="e.g. 080 1234 5678" /></div>{otpSent && <div className="form-field"><label htmlFor="login-otp">SMS verification code</label><input id="login-otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={event => setOtp(event.target.value)} required /></div>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button wide-button" type="submit" disabled={busy}>{busy ? "Please wait..." : demoMode ? `Login as ${role}` : otpSent ? "Verify code and login" : "Send verification code"}</button><p className="fine-print">{demoMode ? "Demo login checks accounts stored in this browser only." : "Sign in with a one-time code sent to your registered mobile number."}</p>{otpSent && <button className="text-button account-back" type="button" onClick={() => { setOtpSent(false); setOtp(""); setError(""); }}>Use a different number</button>}</form>
       <p className="auth-switch">New to Kasua? <button className="text-button" type="button" onClick={onRegister}>Register</button></p>
     </section>
     </main>
@@ -159,13 +188,13 @@ function MerchantApplicationStatus({ account, onLogout }) {
   </div>;
 }
 
-function ProductCard({ product, onAdd }) {
+function ProductCard({ product, onAdd, canPurchase }) {
   const image = `https://images.unsplash.com/${product.image}?auto=format&fit=crop&w=600&q=80`;
   return (
     <article className="product-card">
       <div className="product-image"><img src={image} alt={product.name} loading="lazy" /><span className="price-note"><BadgeCheck size={11} />{product.note}</span></div>
       <div className="product-info"><h3>{product.name}</h3><div className="seller-line"><BadgeCheck size={12} />{product.seller}<span>· ★ {product.rating}</span></div>
-        <div className="product-bottom"><div className="product-price">{formatNaira(product.price)}<span className="product-unit">{product.unit}</span></div><IconButton label={`Add ${product.name} to basket`} className="add-button" onClick={() => onAdd(product)}><Plus size={17} /></IconButton></div>
+        <div className="product-bottom"><div className="product-price">{formatNaira(product.price)}<span className="product-unit">{product.unit}</span></div><button className="icon-button add-button" type="button" aria-label={canPurchase ? `Add ${product.name} to basket` : `Purchasing unavailable for ${product.name}`} disabled={!canPurchase} onClick={() => onAdd(product)}><Plus size={17} /></button></div>
       </div>
     </article>
   );
@@ -211,7 +240,7 @@ function TrustPanel({ onVerify }) {
   return <section className="side-panel trust-panel"><div className="side-panel-header"><h2>Shop with confidence</h2></div><button className="trust-row trust-action" type="button" onClick={onVerify}><div className="trust-icon"><BadgeCheck size={15} /></div><div><strong>Verified local traders</strong><span>Stalls and locations checked</span></div><ChevronRight className="chev" size={15} /></button><div className="trust-row"><div className="trust-icon reward-icon"><Star size={15} /></div><div><strong>Earn Kasua rewards</strong><span>Rate a completed order to earn points</span></div><ChevronRight className="chev" size={15} /></div></section>;
 }
 
-function ShopView({ products, cart, onAdd, onQuantity, onCheckout, onClearCart, walletBalance, notify, search, activeCategory, setActiveCategory, sort, setSort, onTrack, onVerify, order, accountName }) {
+function ShopView({ products, cart, onAdd, onQuantity, onCheckout, onClearCart, walletBalance, notify, search, activeCategory, setActiveCategory, sort, setSort, onTrack, onVerify, order, accountName, demoMode }) {
   const deferredSearch = useDeferredValue(search);
   const visibleProducts = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -229,22 +258,24 @@ function ShopView({ products, cart, onAdd, onQuantity, onCheckout, onClearCart, 
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   return <>
     <div className="mobile-location"><MapPin size={14} /> Delivering to <strong>Masaka, Nasarawa</strong></div>
+    {!demoMode && <div className="backend-banner" role="status"><ShieldCheck size={16} /><span><strong>Account security is connected.</strong> This sample catalog is for preview only; live offers, cart, checkout, and delivery tracking are not connected yet.</span></div>}
     <div className="welcome-row"><div><div className="eyebrow"><Sun size={14} /> Tuesday market, Masaka</div><h1>Good morning, {accountName}</h1></div><span className="account-role"><ShoppingBag size={14} /> Consumer account</span></div>
     <div className="market-layout">
       <div className="main-column">
         <section className="hero"><div className="hero-content"><div className="hero-kicker"><BadgeCheck size={14} /> Checked at the Kasua hub</div><h2>Good food, from your market to your door.</h2><p>Shop Masaka's trusted traders. Every order is checked at our local quality hub before delivery.</p><a className="primary-button" href="#products">Explore today's market <ArrowUpRight size={15} /></a></div></section>
         <section className="category-section"><div className="section-heading"><h2>Shop by category</h2><button className="text-button" type="button" onClick={() => setActiveCategory("All items")}>See all</button></div><CategoryPicker activeCategory={activeCategory} onChange={setActiveCategory} /></section>
         <section id="products"><div className="section-heading products-heading"><div><h2>Fresh from Masaka</h2><p>Fair market prices, updated by verified traders today</p></div><select className="sort-select" value={sort} onChange={event => setSort(event.target.value)} aria-label="Sort products"><option value="featured">Today's picks</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></select></div>
-          <div className="product-grid">{visibleProducts.map(product => <ProductCard key={product.id} product={product} onAdd={onAdd} />)}{visibleProducts.length === 0 && <div className="empty-state">No products match that search. Try another item or category.</div>}</div>
+          <div className="product-grid">{visibleProducts.map(product => <ProductCard key={product.id} product={product} onAdd={onAdd} canPurchase={demoMode} />)}{visibleProducts.length === 0 && <div className="empty-state">No products match that search. Try another item or category.</div>}</div>
         </section>
       </div>
-      <aside className="side-column" aria-label="Your Kasua account"><WalletPanel balance={walletBalance} notify={notify} /><BasketPanel cart={cart} products={products} totals={totals} onQuantity={onQuantity} onCheckout={() => onCheckout(totals)} onClear={onClearCart} /><DeliveryPanel order={order} onTrack={onTrack} /><TrustPanel onVerify={onVerify} /></aside>
+      {demoMode ? <aside className="side-column" aria-label="Your Kasua account"><WalletPanel balance={walletBalance} notify={notify} /><BasketPanel cart={cart} products={products} totals={totals} onQuantity={onQuantity} onCheckout={() => onCheckout(totals)} onClear={onClearCart} /><DeliveryPanel order={order} onTrack={onTrack} /><TrustPanel onVerify={onVerify} /></aside> : <aside className="side-column" aria-label="Account status"><section className="side-panel"><div className="side-panel-header"><h2>Marketplace services</h2></div><div className="basket-content"><p className="account-intro">Your account is secure. Order placement and fulfillment will be enabled after their server-side workflows are connected.</p></div></section></aside>}
     </div>
     <span className="sr-only">{cartCount} items in your basket</span>
   </>;
 }
 
-function MerchantView({ inventory, onAddProduct, onVerify, notify, account }) {
+function MerchantView({ inventory, onAddProduct, onVerify, notify, account, demoMode }) {
+  if (!demoMode) return <section className="merchant-connect-state"><div className="eyebrow"><Store size={14} /> Merchant account</div><h1>Merchant operations are not connected yet</h1><p>Your account is authenticated and your verification status is recorded. Listings, orders, payouts, and fulfillment will appear here after their server APIs are implemented.</p></section>;
   const sales = 38400;
   return <>
     <div className="welcome-row merchant-welcome"><div><div className="eyebrow"><Sun size={14} /> Tuesday market, Masaka</div><h1>Good morning, {account.name}</h1></div><span className="account-role"><Store size={14} /> Verified merchant</span></div>
@@ -285,8 +316,10 @@ function VerificationDialog({ onClose }) {
 function Toast({ message }) { return <div className={`toast ${message ? "show" : ""}`} role="status" aria-live="polite">{message}</div>; }
 
 export default function App() {
-  const [account, setAccount] = usePersistentState("kasua-account", null);
-  const [accounts, setAccounts] = usePersistentState("kasua-accounts", {});
+  const [demoAccount, setDemoAccount] = usePersistentState("kasua-account", null);
+  const [demoAccounts, setDemoAccounts] = usePersistentState("kasua-accounts", {});
+  const [account, setAccount] = useState(() => demoMode ? demoAccount : null);
+  const [authReady, setAuthReady] = useState(!supabaseConfigured);
   const [entryPage, setEntryPage] = useState("landing");
   const [products, setProducts] = usePersistentState("kasua-products", starterProducts);
   const [inventory, setInventory] = usePersistentState("kasua-inventory", starterInventory);
@@ -301,10 +334,54 @@ export default function App() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    if (!account?.phone) return;
-    const phoneKey = account.phone.replace(/\D/g, "");
-    if (phoneKey && !accounts[phoneKey]) setAccounts(current => ({ ...current, [phoneKey]: { ...account, phoneKey } }));
-  }, [account, accounts, setAccounts]);
+    if (!demoMode || !demoAccount?.phone) return;
+    const phoneKey = demoAccount.phone.replace(/\D/g, "");
+    if (phoneKey && !demoAccounts[phoneKey]) setDemoAccounts(current => ({ ...current, [phoneKey]: { ...demoAccount, phoneKey } }));
+  }, [demoAccount, demoAccounts, setDemoAccounts]);
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+    let active = true;
+    async function loadSession(session) {
+      if (!session?.user) {
+        if (active) {
+          setAccount(null);
+          setAuthReady(true);
+        }
+        return;
+      }
+      try {
+        const loadedAccount = await loadAccountProfile(session.user.id);
+        if (active) setAccount(loadedAccount);
+      } catch (error) {
+        if (active) {
+          setAccount(null);
+          setToast(`Could not load your account: ${error.message}`);
+        }
+      } finally {
+        if (active) setAuthReady(true);
+      }
+    }
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        setToast(`Authentication unavailable: ${error.message}`);
+        setAuthReady(true);
+        return;
+      }
+      void loadSession(data.session);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(event => {
+      if (event === "SIGNED_OUT") {
+        setAccount(null);
+        setAuthReady(true);
+      }
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -324,11 +401,13 @@ export default function App() {
     setCart(current => current.map(line => line.productId === productId ? { ...line, quantity: line.quantity + difference } : line).filter(line => line.quantity > 0));
   }
   function openCheckout(totals) {
+    if (!demoMode) return notify("Checkout is not connected to secure order and payment processing yet.");
     if (!cart.length) return notify("Add an item to your basket first");
     setCheckoutTotals(totals);
     setDialog("checkout");
   }
   function placeOrder(method, totals) {
+    if (!demoMode) return notify("Order processing is unavailable until the secure checkout service is connected.");
     const newOrder = {
       id: `KA-${Math.floor(2000 + Math.random() * 7000)}`,
       status: 1,
@@ -358,40 +437,122 @@ export default function App() {
     setOrder(current => ({ ...current, updatedAt: new Intl.DateTimeFormat("en-NG", { hour: "numeric", minute: "2-digit" }).format(new Date()) }));
     notify("Tracking status refreshed");
   }
-  function registerAccount(newAccount) {
+  async function registerAccount(newAccount, otp) {
+    if (!demoMode) {
+      if (!supabase) return { error: "Backend is not configured. Add the Supabase URL and anon key to enable registration." };
+      const phone = normalizeNigerianPhone(newAccount.phone);
+      if (!phone) return { error: "Enter a valid Nigerian mobile number." };
+      if (!otp) {
+        const { error } = await supabase.auth.signInWithOtp({
+          phone,
+          options: {
+            shouldCreateUser: true,
+            data: {
+              account_type: newAccount.role,
+              full_name: newAccount.name,
+            },
+          },
+        });
+        return error ? { error: error.message } : { otpSent: true };
+      }
+
+      const { data, error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
+      if (error) return { error: error.message };
+      try {
+        const profile = await loadAccountProfile(data.user.id);
+        if (profile.role !== newAccount.role) {
+          await supabase.auth.signOut();
+          return { error: `This number already belongs to a ${profile.role} account.` };
+        }
+        if (newAccount.role === "merchant") {
+          const application = newAccount.application;
+          const { error: applicationError } = await supabase.from("merchant_profiles").insert({
+            user_id: data.user.id,
+            store_name: application.stall,
+            market_name: application.market,
+            stall_number: application.stallNumber,
+            landmark: application.landmark,
+            verification_status: "pending",
+          });
+          if (applicationError && applicationError.code !== "23505") throw applicationError;
+        }
+        setAccount(await loadAccountProfile(data.user.id));
+        return null;
+      } catch (registrationError) {
+        await supabase.auth.signOut();
+        return { error: registrationError.message || "Could not save your application." };
+      }
+    }
+
     const phoneKey = newAccount.phone.replace(/\D/g, "");
-    if (phoneKey.length < 7) return "Enter a valid mobile number.";
-    if (accounts[phoneKey]) return "An account already uses this number. Login with its registered role.";
+    if (phoneKey.length < 7) return { error: "Enter a valid mobile number." };
+    if (demoAccounts[phoneKey]) return { error: "An account already uses this number. Login with its registered role." };
     const savedAccount = { ...newAccount, phoneKey };
-    setAccounts(current => ({ ...current, [phoneKey]: savedAccount }));
+    setDemoAccounts(current => ({ ...current, [phoneKey]: savedAccount }));
+    setDemoAccount(savedAccount);
     setAccount(savedAccount);
-    return "";
+    return null;
   }
-  function loginAccount(role, phone) {
+  async function loginAccount(role, phone, otp) {
+    if (!demoMode) {
+      if (!supabase) return { error: "Backend is not configured. Add the Supabase URL and anon key to enable login." };
+      const normalizedPhone = normalizeNigerianPhone(phone);
+      if (!normalizedPhone) return { error: "Enter a valid Nigerian mobile number." };
+      if (!otp) {
+        const { error } = await supabase.auth.signInWithOtp({ phone: normalizedPhone, options: { shouldCreateUser: false } });
+        return error ? { error: error.message } : { otpSent: true };
+      }
+
+      const { data, error } = await supabase.auth.verifyOtp({ phone: normalizedPhone, token: otp, type: "sms" });
+      if (error) return { error: error.message };
+      try {
+        const loadedAccount = await loadAccountProfile(data.user.id);
+        if (loadedAccount.role !== role) {
+          await supabase.auth.signOut();
+          return { error: `This number is registered as a ${loadedAccount.role}. Choose that role to continue.` };
+        }
+        setAccount(loadedAccount);
+        return null;
+      } catch (loginError) {
+        await supabase.auth.signOut();
+        return { error: loginError.message || "Could not load your account." };
+      }
+    }
+
     const phoneKey = phone.replace(/\D/g, "");
-    const savedAccount = accounts[phoneKey];
-    if (!savedAccount) return "No account found for that number. Register first.";
-    if (savedAccount.role !== role) return `This number is registered as a ${savedAccount.role}. Choose that role to continue.`;
+    const savedAccount = demoAccounts[phoneKey];
+    if (!savedAccount) return { error: "No account found for that number. Register first." };
+    if (savedAccount.role !== role) return { error: `This number is registered as a ${savedAccount.role}. Choose that role to continue.` };
+    setDemoAccount(savedAccount);
     setAccount(savedAccount);
-    return "";
+    return null;
   }
   function logout() {
-    setAccount(null);
     setEntryPage("landing");
+    if (demoMode) {
+      setAccount(null);
+      setDemoAccount(null);
+      return;
+    }
+    if (supabase) void supabase.auth.signOut();
   }
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
-  const productHandler = () => setDialog("addProduct");
+  const productHandler = () => {
+    if (!demoMode) return notify("Product management will be enabled when the merchant API is connected.");
+    setDialog("addProduct");
+  };
 
+  if (!authReady) return <div className="auth-page"><AuthHeader /><main className="account-gate"><section className="account-panel" role="status">Loading your secure account...</section></main></div>;
   if (!account) {
-    if (entryPage === "register") return <RegisterPage onRegister={registerAccount} onLogin={() => setEntryPage("login")} onHome={() => setEntryPage("landing")} />;
-    if (entryPage === "login") return <LoginPage onLogin={loginAccount} onRegister={() => setEntryPage("register")} onHome={() => setEntryPage("landing")} />;
+    if (entryPage === "register") return <RegisterPage onRegister={registerAccount} onLogin={() => setEntryPage("login")} onHome={() => setEntryPage("landing")} demoMode={demoMode} />;
+    if (entryPage === "login") return <LoginPage onLogin={loginAccount} onRegister={() => setEntryPage("register")} onHome={() => setEntryPage("landing")} demoMode={demoMode} />;
     return <LandingPage onRegister={() => setEntryPage("register")} onLogin={() => setEntryPage("login")} />;
   }
   if (account.role === "merchant" && account.verificationStatus !== "verified") return <MerchantApplicationStatus account={account} onLogout={logout} />;
 
   return <div className="app-shell" id="top">
-    <Header search={search} setSearch={setSearch} cartCount={cartCount} walletBalance={walletBalance} onWallet={() => document.getElementById("wallet")?.scrollIntoView({ behavior: "smooth", block: "center" })} onCart={() => document.getElementById("cart")?.scrollIntoView({ behavior: "smooth", block: "center" })} account={account} onLogout={logout} notify={notify} />
-    <main>{account.role === "consumer" ? <ShopView products={products} cart={cart} onAdd={addToCart} onQuantity={changeQuantity} onCheckout={openCheckout} onClearCart={() => { setCart([]); notify("Basket cleared"); }} walletBalance={walletBalance} notify={notify} search={search} activeCategory={activeCategory} setActiveCategory={setActiveCategory} sort={sort} setSort={setSort} order={order} accountName={account.name} onTrack={() => setDialog("tracking")} onVerify={() => setDialog("verification")} /> : <MerchantView inventory={inventory} onAddProduct={productHandler} onVerify={() => setDialog("verification")} notify={notify} account={account} />}</main>
+    <Header search={search} setSearch={setSearch} cartCount={cartCount} walletBalance={walletBalance} onWallet={() => document.getElementById("wallet")?.scrollIntoView({ behavior: "smooth", block: "center" })} onCart={() => document.getElementById("cart")?.scrollIntoView({ behavior: "smooth", block: "center" })} account={account} onLogout={logout} demoMode={demoMode} />
+    <main>{account.role === "consumer" ? <ShopView products={products} cart={cart} onAdd={addToCart} onQuantity={changeQuantity} onCheckout={openCheckout} onClearCart={() => { setCart([]); notify("Basket cleared"); }} walletBalance={walletBalance} notify={notify} search={search} activeCategory={activeCategory} setActiveCategory={setActiveCategory} sort={sort} setSort={setSort} order={order} accountName={account.name} onTrack={() => setDialog("tracking")} onVerify={() => setDialog("verification")} demoMode={demoMode} /> : <MerchantView inventory={inventory} onAddProduct={productHandler} onVerify={() => setDialog("verification")} notify={notify} account={account} demoMode={demoMode} />}</main>
     {dialog === "checkout" && checkoutTotals && <CheckoutDialog totals={checkoutTotals} walletBalance={walletBalance} onClose={() => setDialog(null)} onPlaceOrder={placeOrder} />}
     {dialog === "addProduct" && <ProductDialog onClose={() => setDialog(null)} onSave={saveProduct} />}
     {dialog === "tracking" && <TrackingDialog order={order} onClose={() => setDialog(null)} onRefresh={refreshOrder} />}

@@ -96,6 +96,8 @@ h1 { margin: 4px 0 0; font: 700 26px/1.2 "Manrope", sans-serif; letter-spacing: 
 .product-unit { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 500; }
 .add-button { width: 31px; height: 31px; border: 0; border-radius: 5px; background: var(--green); color: white; cursor: pointer; }
 .add-button:hover { background: var(--green-dark); }
+.add-button:disabled, .wallet-link:disabled, .icon-button:disabled { cursor: not-allowed; opacity: .45; }
+.add-button:disabled:hover { background: var(--green); }
 .empty-state { grid-column: 1/-1; padding: 35px; border: 1px dashed var(--line); border-radius: 7px; color: var(--muted); text-align: center; }
 .side-column { min-width: 0; display: grid; gap: 14px; }
 .side-panel { min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: white; }
@@ -149,6 +151,12 @@ h1 { margin: 4px 0 0; font: 700 26px/1.2 "Manrope", sans-serif; letter-spacing: 
 .trust-row span, .merchant-wallet-row span { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
 .trust-row .chev, .merchant-wallet-row .chev { flex: 0 0 auto; margin-left: auto; color: #9ba69b; }
 .mobile-location { display: none; }
+.backend-banner { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid #e5d8b8; border-radius: 5px; background: #fff9ec; color: #65583d; font-size: 11px; line-height: 1.5; }
+.backend-banner svg { flex: 0 0 auto; color: var(--green); }
+.backend-banner strong { color: var(--ink); }
+.merchant-connect-state { max-width: 720px; margin: 50px auto; padding: 28px; border: 1px solid var(--line); border-radius: 7px; background: white; }
+.merchant-connect-state h1 { margin: 10px 0; font: 700 24px/1.25 "Manrope", sans-serif; }
+.merchant-connect-state p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .merchant-banner { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px 28px; border-radius: 8px; background: linear-gradient(110deg, #1b6843 0%, #1b6843 58%, #398459 100%); color: white; }
 .merchant-banner h2 { margin: 7px 0 5px; font: 700 25px "Manrope", sans-serif; }
 .merchant-banner p { margin: 0; color: rgba(255, 255, 255, .78); font-size: 12px; }
