@@ -179,7 +179,7 @@ function MerchantApplicationStatus({ account, onLogout }) {
     <section className="account-panel application-status">
       <div className="eyebrow"><ScanEye size={14} /> Merchant application</div>
       <h1>Review in progress</h1>
-      <p className="account-intro">Hi {account.name}, your application for <strong>{account.application.stall}</strong> is saved. Merchant tools remain locked until Kasua completes these checks.</p>
+      <p className="account-intro">Hi {account.name}, {account.application?.stall ? <>your application for <strong>{account.application.stall}</strong> is saved.</> : "your merchant application is not complete yet."} Merchant tools remain locked until Kasua completes these checks.</p>
       <div className="verification-requirements status-list"><strong>Verification stages</strong><span>1. Confirm mobile number with one-time code</span><span>2. Verify identity documents securely</span><span>3. Confirm market, stall and association details</span><span>4. Inspect stall and confirm its location in person</span><span>5. Approve the account and enable selling</span></div>
       <p className="fine-print">This demo records a pending application in this browser. It does not verify identity or approve merchant access.</p>
       <button className="primary-button wide-button" type="button" onClick={onLogout}>Sign out</button>
