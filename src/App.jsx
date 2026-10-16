@@ -6,7 +6,7 @@ import {
   ShoppingBasket, Star, Store, Sun, Wallet, Wheat, X,
 } from "lucide-react";
 import { categories, demoOrder, formatNaira, readStored, starterInventory, starterProducts } from "./data.js";
-import { demoMode, loadAccountProfile, normalizeNigerianPhone, supabase, supabaseConfigured } from "./lib/supabase.js";
+import { demoMode, loadAccountProfile, supabase, supabaseConfigured } from "./lib/supabase.js";
 
 const paymentMethods = [
   { id: "wallet", title: "Kasua wallet", detail: "Wallet balance" },
@@ -81,9 +81,7 @@ function LandingPage({ onRegister, onLogin }) {
 
 function RegisterPage({ onRegister, onLogin, onHome, demoMode }) {
   const [accountType, setAccountType] = useState("consumer");
-  const [form, setForm] = useState({ name: "", phone: "", stall: "", market: "", stallNumber: "", landmark: "", confirmsAccuracy: false });
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "", phone: "", stall: "", market: "", stallNumber: "", landmark: "", confirmsAccuracy: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   function update(event) {
@@ -94,11 +92,15 @@ function RegisterPage({ onRegister, onLogin, onHome, demoMode }) {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const account = { role: accountType, name: form.name.trim(), phone: form.phone.trim(), verificationStatus: accountType === "merchant" ? "pending" : "active" };
+    if (!demoMode && form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      setBusy(false);
+      return;
+    }
+    const account = { role: accountType, name: form.name.trim(), email: form.email.trim().toLowerCase(), password: form.password, phone: form.phone.trim(), verificationStatus: accountType === "merchant" ? "pending" : "active" };
     if (accountType === "merchant") account.application = { stall: form.stall.trim(), market: form.market.trim(), stallNumber: form.stallNumber.trim(), landmark: form.landmark.trim() };
     try {
-      const result = await onRegister(account, otpSent ? otp : "");
-      if (result?.otpSent) setOtpSent(true);
+      const result = await onRegister(account);
       if (result?.error) setError(result.error);
     } catch (submissionError) {
       setError(submissionError.message || "Could not complete registration.");
@@ -113,22 +115,24 @@ function RegisterPage({ onRegister, onLogin, onHome, demoMode }) {
       <div className="eyebrow"><ShieldCheck size={14} /> Create your Kasua account</div>
       <h1>{accountType === "merchant" ? "Apply to sell on Kasua" : "Register as a consumer"}</h1>
       <p className="account-intro">Each account has one role. Merchant access is enabled only after identity, stall and location checks.</p>
-      <div className="role-picker" aria-label="Account type"><button type="button" className={accountType === "consumer" ? "active" : ""} disabled={otpSent || busy} onClick={() => setAccountType("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={accountType === "merchant" ? "active" : ""} disabled={otpSent || busy} onClick={() => setAccountType("merchant")}><Store size={15} /> Merchant</button></div>
+      <div className="role-picker" aria-label="Account type"><button type="button" className={accountType === "consumer" ? "active" : ""} disabled={busy} onClick={() => setAccountType("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={accountType === "merchant" ? "active" : ""} disabled={busy} onClick={() => setAccountType("merchant")}><Store size={15} /> Merchant</button></div>
       <form className="account-form" onSubmit={submit}>
-        <div className="form-field"><label htmlFor="account-name">{accountType === "merchant" ? "Legal name" : "Your name"}</label><input id="account-name" name="name" autoComplete="name" value={form.name} onChange={update} required disabled={otpSent || busy} /></div>
-        <div className="form-field"><label htmlFor="account-phone">Mobile number</label><input id="account-phone" name="phone" type="tel" autoComplete="tel" value={form.phone} onChange={update} required disabled={otpSent || busy} placeholder="e.g. 080 1234 5678" /></div>
-        {accountType === "merchant" && <>
-          <div className="form-field"><label htmlFor="merchant-stall">Business or stall name</label><input id="merchant-stall" name="stall" value={form.stall} onChange={update} required disabled={otpSent || busy} /></div>
-          <div className="form-row"><div className="form-field"><label htmlFor="merchant-market">Market</label><input id="merchant-market" name="market" value={form.market} onChange={update} required disabled={otpSent || busy} placeholder="e.g. Masaka Main" /></div><div className="form-field"><label htmlFor="merchant-stall-number">Stall number</label><input id="merchant-stall-number" name="stallNumber" value={form.stallNumber} onChange={update} required disabled={otpSent || busy} /></div></div>
-          <div className="form-field"><label htmlFor="merchant-landmark">Stall location or nearby landmark</label><input id="merchant-landmark" name="landmark" value={form.landmark} onChange={update} required disabled={otpSent || busy} /></div>
-          <div className="verification-requirements"><strong>Required before selling</strong><span>Phone ownership and legal identity check</span><span>Market association and stall confirmation</span><span>In-person stall inspection and location pin</span><span>Product and pricing policy review</span></div>
-          <label className="consent-row"><input name="confirmsAccuracy" type="checkbox" checked={form.confirmsAccuracy} onChange={update} required disabled={otpSent || busy} /><span>I confirm these details are accurate and consent to an in-person stall check.</span></label>
+        <div className="form-field"><label htmlFor="account-name">{accountType === "merchant" ? "Legal name" : "Your name"}</label><input id="account-name" name="name" autoComplete="name" value={form.name} onChange={update} required disabled={busy} /></div>
+        {demoMode ? <div className="form-field"><label htmlFor="account-phone">Mobile number</label><input id="account-phone" name="phone" type="tel" autoComplete="tel" value={form.phone} onChange={update} required disabled={busy} placeholder="e.g. 080 1234 5678" /></div> : <>
+          <div className="form-field"><label htmlFor="account-email">Email address</label><input id="account-email" name="email" type="email" autoComplete="email" value={form.email} onChange={update} required disabled={busy} /></div>
+          <div className="form-row"><div className="form-field"><label htmlFor="account-password">Password</label><input id="account-password" name="password" type="password" autoComplete="new-password" minLength="12" value={form.password} onChange={update} required disabled={busy} /></div><div className="form-field"><label htmlFor="account-confirm-password">Confirm password</label><input id="account-confirm-password" name="confirmPassword" type="password" autoComplete="new-password" minLength="12" value={form.confirmPassword} onChange={update} required disabled={busy} /></div></div>
+          {accountType === "merchant" && <div className="form-field"><label htmlFor="merchant-contact-phone">Business contact number (not verified)</label><input id="merchant-contact-phone" name="phone" type="tel" autoComplete="tel" value={form.phone} onChange={update} required disabled={busy} placeholder="e.g. 080 1234 5678" /></div>}
         </>}
-        {otpSent && <div className="form-field"><label htmlFor="register-otp">SMS verification code</label><input id="register-otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={event => setOtp(event.target.value)} required /></div>}
+        {accountType === "merchant" && <>
+          <div className="form-field"><label htmlFor="merchant-stall">Business or stall name</label><input id="merchant-stall" name="stall" value={form.stall} onChange={update} required disabled={busy} /></div>
+          <div className="form-row"><div className="form-field"><label htmlFor="merchant-market">Market</label><input id="merchant-market" name="market" value={form.market} onChange={update} required disabled={busy} placeholder="e.g. Masaka Main" /></div><div className="form-field"><label htmlFor="merchant-stall-number">Stall number</label><input id="merchant-stall-number" name="stallNumber" value={form.stallNumber} onChange={update} required disabled={busy} /></div></div>
+          <div className="form-field"><label htmlFor="merchant-landmark">Stall location or nearby landmark</label><input id="merchant-landmark" name="landmark" value={form.landmark} onChange={update} required disabled={busy} /></div>
+          <div className="verification-requirements"><strong>Required before selling</strong><span>Identity and business ownership review</span><span>Market association and stall confirmation</span><span>In-person stall inspection and location pin</span><span>Product and pricing policy review</span></div>
+          <label className="consent-row"><input name="confirmsAccuracy" type="checkbox" checked={form.confirmsAccuracy} onChange={update} required disabled={busy} /><span>I confirm these details are accurate and consent to an in-person stall check.</span></label>
+        </>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="primary-button wide-button" type="submit" disabled={busy}>{busy ? "Please wait..." : demoMode ? accountType === "merchant" ? "Submit merchant application" : "Create consumer account" : otpSent ? "Verify code and continue" : "Send verification code"}</button>
-        <p className="fine-print">{demoMode ? "Demo registration is stored in this browser. Do not use it for real customer or merchant data." : "A one-time SMS code verifies this mobile number. Merchant access remains pending review."}</p>
-        {otpSent && <button className="text-button account-back" type="button" onClick={() => { setOtpSent(false); setOtp(""); setError(""); }}>Use a different number or edit details</button>}
+        <button className="primary-button wide-button" type="submit" disabled={busy}>{busy ? "Please wait..." : demoMode ? accountType === "merchant" ? "Submit merchant application" : "Create consumer account" : accountType === "merchant" ? "Create merchant account" : "Create consumer account"}</button>
+        <p className="fine-print">{demoMode ? "Demo registration is stored in this browser. Do not use it for real customer or merchant data." : "Use a unique email and a password with at least 12 characters. Merchant access remains pending review."}</p>
       </form>
       <p className="auth-switch">Already registered? <button className="text-button" type="button" onClick={onLogin}>Login</button></p>
     </section>
@@ -139,8 +143,8 @@ function RegisterPage({ onRegister, onLogin, onHome, demoMode }) {
 function LoginPage({ onLogin, onRegister, onHome, demoMode }) {
   const [role, setRole] = useState("consumer");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event) {
@@ -148,8 +152,7 @@ function LoginPage({ onLogin, onRegister, onHome, demoMode }) {
     setBusy(true);
     setError("");
     try {
-      const result = await onLogin(role, phone, otpSent ? otp : "");
-      if (result?.otpSent) setOtpSent(true);
+      const result = await onLogin(role, demoMode ? phone : email, password);
       if (result?.error) setError(result.error);
     } catch (loginError) {
       setError(loginError.message || "Could not sign in.");
@@ -164,8 +167,8 @@ function LoginPage({ onLogin, onRegister, onHome, demoMode }) {
       <div className="eyebrow"><ShieldCheck size={14} /> One account, one role</div>
       <h1>Login to Kasua</h1>
       <p className="account-intro">Choose the role for the account you registered.</p>
-      <div className="role-picker" aria-label="Login as"><button type="button" className={role === "consumer" ? "active" : ""} disabled={otpSent || busy} onClick={() => setRole("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={role === "merchant" ? "active" : ""} disabled={otpSent || busy} onClick={() => setRole("merchant")}><Store size={15} /> Merchant</button></div>
-      <form className="account-form" onSubmit={submit}><div className="form-field"><label htmlFor="login-phone">Mobile number</label><input id="login-phone" name="phone" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} disabled={otpSent || busy} required placeholder="e.g. 080 1234 5678" /></div>{otpSent && <div className="form-field"><label htmlFor="login-otp">SMS verification code</label><input id="login-otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={event => setOtp(event.target.value)} required /></div>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button wide-button" type="submit" disabled={busy}>{busy ? "Please wait..." : demoMode ? `Login as ${role}` : otpSent ? "Verify code and login" : "Send verification code"}</button><p className="fine-print">{demoMode ? "Demo login checks accounts stored in this browser only." : "Sign in with a one-time code sent to your registered mobile number."}</p>{otpSent && <button className="text-button account-back" type="button" onClick={() => { setOtpSent(false); setOtp(""); setError(""); }}>Use a different number</button>}</form>
+      <div className="role-picker" aria-label="Login as"><button type="button" className={role === "consumer" ? "active" : ""} disabled={busy} onClick={() => setRole("consumer")}><ShoppingBag size={15} /> Consumer</button><button type="button" className={role === "merchant" ? "active" : ""} disabled={busy} onClick={() => setRole("merchant")}><Store size={15} /> Merchant</button></div>
+      <form className="account-form" onSubmit={submit}>{demoMode ? <div className="form-field"><label htmlFor="login-phone">Mobile number</label><input id="login-phone" name="phone" type="tel" autoComplete="tel" value={phone} onChange={event => setPhone(event.target.value)} required placeholder="e.g. 080 1234 5678" /></div> : <><div className="form-field"><label htmlFor="login-email">Email address</label><input id="login-email" name="email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required /></div><div className="form-field"><label htmlFor="login-password">Password</label><input id="login-password" name="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></div></>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button wide-button" type="submit" disabled={busy}>{busy ? "Please wait..." : `Login as ${role}`}</button><p className="fine-print">{demoMode ? "Demo login checks accounts stored in this browser only." : "Email/password sign-in is enabled for pre-release testing. Email ownership is not confirmed."}</p></form>
       <p className="auth-switch">New to Kasua? <button className="text-button" type="button" onClick={onRegister}>Register</button></p>
     </section>
     </main>
@@ -180,7 +183,7 @@ function MerchantApplicationStatus({ account, onLogout }) {
       <div className="eyebrow"><ScanEye size={14} /> Merchant application</div>
       <h1>Review in progress</h1>
       <p className="account-intro">Hi {account.name}, {account.application?.stall ? <>your application for <strong>{account.application.stall}</strong> is saved.</> : "your merchant application is not complete yet."} Merchant tools remain locked until Kasua completes these checks.</p>
-      <div className="verification-requirements status-list"><strong>Verification stages</strong><span>1. Confirm mobile number with one-time code</span><span>2. Verify identity documents securely</span><span>3. Confirm market, stall and association details</span><span>4. Inspect stall and confirm its location in person</span><span>5. Approve the account and enable selling</span></div>
+      <div className="verification-requirements status-list"><strong>Verification stages</strong><span>1. Review merchant identity and business ownership</span><span>2. Confirm market, stall and association details</span><span>3. Inspect stall and confirm its location in person</span><span>4. Approve the account and enable selling</span></div>
       <p className="fine-print">This demo records a pending application in this browser. It does not verify identity or approve merchant access.</p>
       <button className="primary-button wide-button" type="button" onClick={onLogout}>Sign out</button>
     </section>
@@ -437,32 +440,35 @@ export default function App() {
     setOrder(current => ({ ...current, updatedAt: new Intl.DateTimeFormat("en-NG", { hour: "numeric", minute: "2-digit" }).format(new Date()) }));
     notify("Tracking status refreshed");
   }
-  async function registerAccount(newAccount, otp) {
+  async function registerAccount(newAccount) {
     if (!demoMode) {
       if (!supabase) return { error: "Backend is not configured. Add the Supabase URL and anon key to enable registration." };
-      const phone = normalizeNigerianPhone(newAccount.phone);
-      if (!phone) return { error: "Enter a valid Nigerian mobile number." };
-      if (!otp) {
-        const { error } = await supabase.auth.signInWithOtp({
-          phone,
-          options: {
-            shouldCreateUser: true,
-            data: {
-              account_type: newAccount.role,
-              full_name: newAccount.name,
-            },
+      if (!newAccount.email || newAccount.password.length < 12) return { error: "Use a valid email and a password with at least 12 characters." };
+      const { data, error } = await supabase.auth.signUp({
+        email: newAccount.email,
+        password: newAccount.password,
+        options: {
+          data: {
+            account_type: newAccount.role,
+            full_name: newAccount.name,
+            phone: newAccount.phone || "",
           },
-        });
-        return error ? { error: error.message } : { otpSent: true };
-      }
-
-      const { data, error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
+        },
+      });
       if (error) return { error: error.message };
+      if (!data.session) return { error: "Supabase email confirmation is still enabled. Turn it off temporarily for this pre-release test, then try registration again." };
       try {
         const profile = await loadAccountProfile(data.user.id);
         if (profile.role !== newAccount.role) {
           await supabase.auth.signOut();
-          return { error: `This number already belongs to a ${profile.role} account.` };
+          return { error: `This email already belongs to a ${profile.role} account.` };
+        }
+        if (newAccount.phone) {
+          const { error: contactError } = await supabase
+            .from("profiles")
+            .update({ phone: newAccount.phone })
+            .eq("id", data.user.id);
+          if (contactError) throw contactError;
         }
         if (newAccount.role === "merchant") {
           const application = newAccount.application;
@@ -493,17 +499,11 @@ export default function App() {
     setAccount(savedAccount);
     return null;
   }
-  async function loginAccount(role, phone, otp) {
+  async function loginAccount(role, identifier, password) {
     if (!demoMode) {
       if (!supabase) return { error: "Backend is not configured. Add the Supabase URL and anon key to enable login." };
-      const normalizedPhone = normalizeNigerianPhone(phone);
-      if (!normalizedPhone) return { error: "Enter a valid Nigerian mobile number." };
-      if (!otp) {
-        const { error } = await supabase.auth.signInWithOtp({ phone: normalizedPhone, options: { shouldCreateUser: false } });
-        return error ? { error: error.message } : { otpSent: true };
-      }
-
-      const { data, error } = await supabase.auth.verifyOtp({ phone: normalizedPhone, token: otp, type: "sms" });
+      if (!identifier || !password) return { error: "Enter your email and password." };
+      const { data, error } = await supabase.auth.signInWithPassword({ email: identifier.trim().toLowerCase(), password });
       if (error) return { error: error.message };
       try {
         const loadedAccount = await loadAccountProfile(data.user.id);
@@ -519,7 +519,7 @@ export default function App() {
       }
     }
 
-    const phoneKey = phone.replace(/\D/g, "");
+    const phoneKey = identifier.replace(/\D/g, "");
     const savedAccount = demoAccounts[phoneKey];
     if (!savedAccount) return { error: "No account found for that number. Register first." };
     if (savedAccount.role !== role) return { error: `This number is registered as a ${savedAccount.role}. Choose that role to continue.` };

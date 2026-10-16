@@ -16,14 +16,6 @@ export const supabase = supabaseUrl && supabaseAnonKey
 export const supabaseConfigured = Boolean(supabase);
 export const demoMode = !supabaseConfigured && import.meta.env.DEV && import.meta.env.VITE_DEMO_MODE !== "false";
 
-export function normalizeNigerianPhone(phone) {
-  const digits = phone.replace(/\D/g, "");
-  if (/^0\d{10}$/.test(digits)) return `+234${digits.slice(1)}`;
-  if (/^234\d{10}$/.test(digits)) return `+${digits}`;
-  if (/^\d{10}$/.test(digits)) return `+234${digits}`;
-  return null;
-}
-
 export async function loadAccountProfile(userId) {
   if (!supabase) throw new Error("Supabase is not configured.");
   const { data: profile, error } = await supabase
